@@ -64,13 +64,7 @@ mod custom_serde {
     pub fn serialize_decimal<S>(value: &Decimal, serializer: S) -> Result<S::Ok, S::Error>
         where S: Serializer
     {
-        let mut rounded_value = value.round_dp(PRECISION);
-
-        if rounded_value.scale() == 0 {
-            let _ = rounded_value.set_scale(1);
-        }
-
-        serializer.serialize_str(&rounded_value.to_string())
+        serializer.serialize_str(&value.round_dp(PRECISION).to_string())
     }
 
     pub fn deserialize_transaction_type<'a, D>(deserializer: D) -> Result<TransactionType, D::Error>
@@ -211,7 +205,7 @@ mod tests {
         writer.serialize(account).unwrap();
 
         let output = String::from_utf8(writer.into_inner().unwrap()).unwrap();
-        assert_eq!(output, "client,available,held,total,locked\n1,0.0,0.0,0.0,false\n");
+        assert_eq!(output, "client,available,held,total,locked\n1,0,0,0,false\n");
     }
 
     #[test]
@@ -224,6 +218,6 @@ mod tests {
         writer.serialize(account).unwrap();
 
         let output = String::from_utf8(writer.into_inner().unwrap()).unwrap();
-        assert_eq!(output, "client,available,held,total,locked\n1,0.1235,0.0,0.0,true\n");
+        assert_eq!(output, "client,available,held,total,locked\n1,0.1235,0,0,true\n");
     }
 }
