@@ -425,6 +425,7 @@ mod tests {
         assert_eq!(account.available, dec!(10));
         assert_eq!(account.held, dec!(0));
         assert_eq!(account.total, dec!(10));
+        assert_eq!(account.locked, true);
     }
 
     #[test]
@@ -459,6 +460,7 @@ mod tests {
         assert_eq!(account.available, dec!(10));
         assert_eq!(account.held, dec!(5));
         assert_eq!(account.total, dec!(15));
+        assert_eq!(account.locked, false);
     }
 
     #[test]
@@ -493,6 +495,7 @@ mod tests {
         assert_eq!(account.available, dec!(10));
         assert_eq!(account.held, dec!(5));
         assert_eq!(account.total, dec!(15));
+        assert_eq!(account.locked, false);
     }
 
     #[test]
