@@ -1,13 +1,14 @@
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
-use serde::{ Deserialize, Serialize };
+use serde::{ de, Deserialize, Serialize };
 
 #[cfg_attr(test, derive(Debug, PartialEq, Eq))]
 #[derive(Deserialize)]
-#[serde(rename_all = "lowercase")]
+// #[serde(untagged)]
+// #[serde(tag = "type", content = "amount", rename_all = "lowercase")]
 enum TransactionType {
-    Deposit,
-    Withdrawal,
+    Deposit(Decimal),
+    Withdrawal(Decimal),
     Dispute,
     Resolve,
     Chargeback,
@@ -20,10 +21,9 @@ pub struct Transaction {
     client_id: u16,
     #[serde(rename = "tx")]
     tx_id: u32,
-    #[serde(rename = "type")]
+    // #[serde(flatten)] //, deserialize_with = "custom_serde::deserialize_transaction_type")]
+    #[serde(flatten, deserialize_with = "custom_serde::deserialize_transaction_type")]
     tx_type: TransactionType,
-    #[serde(deserialize_with = "decimal_serde::deserialize")]
-    amount: Option<Decimal>,
 }
 
 #[cfg_attr(test, derive(Debug, PartialEq, Eq))]
@@ -31,11 +31,11 @@ pub struct Transaction {
 pub struct Account {
     #[serde(rename = "client")]
     client_id: u16,
-    #[serde(serialize_with = "decimal_serde::serialize")]
+    #[serde(serialize_with = "custom_serde::serialize_decimal")]
     available: Decimal,
-    #[serde(serialize_with = "decimal_serde::serialize")]
+    #[serde(serialize_with = "custom_serde::serialize_decimal")]
     held: Decimal,
-    #[serde(serialize_with = "decimal_serde::serialize")]
+    #[serde(serialize_with = "custom_serde::serialize_decimal")]
     total: Decimal,
     locked: bool,
 }
@@ -52,14 +52,16 @@ impl Account {
     }
 }
 
-mod decimal_serde {
+mod custom_serde {
+    use std::fmt;
+
     use serde::{ Deserialize, Deserializer, Serializer };
 
     use super::*;
 
     const PRECISION: u32 = 4;
 
-    pub fn serialize<S>(value: &Decimal, serializer: S) -> Result<S::Ok, S::Error>
+    pub fn serialize_decimal<S>(value: &Decimal, serializer: S) -> Result<S::Ok, S::Error>
         where S: Serializer
     {
         let mut rounded_value = value.round_dp(PRECISION);
@@ -71,16 +73,58 @@ mod decimal_serde {
         serializer.serialize_str(&rounded_value.to_string())
     }
 
-    pub fn deserialize<'a, D>(deserializer: D) -> Result<Option<Decimal>, D::Error>
+    pub fn deserialize_transaction_type<'a, D>(deserializer: D) -> Result<TransactionType, D::Error>
         where D: Deserializer<'a>
     {
-        let str = String::deserialize(deserializer)?;
-        if str.is_empty() {
-            return Ok(None);
+        #[derive(Deserialize, Debug)]
+        struct Helper {
+            #[serde(rename = "type")]
+            tx_type: String,
+            #[serde(deserialize_with = "f64_as_string")]
+            amount: String,
         }
 
-        let value = str.parse::<Decimal>().map_err(serde::de::Error::custom)?;
-        Ok(Some(value.round_dp(PRECISION)))
+        let helper = Helper::deserialize(deserializer)?;
+        let amount = Decimal::from_str_exact(&helper.amount).map_err(|_|
+            de::Error::missing_field("amount")
+        );
+
+        match helper.tx_type.as_str() {
+            "deposit" => Ok(TransactionType::Deposit(amount?.round_dp(PRECISION))),
+            "withdrawal" => Ok(TransactionType::Withdrawal(amount?.round_dp(PRECISION))),
+            "dispute" => Ok(TransactionType::Dispute),
+            "resolve" => Ok(TransactionType::Resolve),
+            "chargeback" => Ok(TransactionType::Chargeback),
+            _ =>
+                Err(
+                    de::Error::unknown_variant(
+                        helper.tx_type.as_str(),
+                        &["deposit", "withdrawal", "dispute", "resolve", "chargeback"]
+                    )
+                ),
+        }
+    }
+
+    fn f64_as_string<'de, D>(deserializer: D) -> Result<String, D::Error> where D: Deserializer<'de> {
+        struct F64Visitor;
+
+        impl<'de> serde::de::Visitor<'de> for F64Visitor {
+            type Value = String;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a float as a string")
+            }
+
+            fn visit_f64<E>(self, v: f64) -> Result<Self::Value, E> where E: serde::de::Error {
+                Ok(v.to_string())
+            }
+
+            fn visit_string<E>(self, v: String) -> Result<Self::Value, E> where E: serde::de::Error {
+                Ok(v)
+            }
+        }
+
+        deserializer.deserialize_any(F64Visitor)
     }
 }
 
@@ -99,8 +143,7 @@ mod tests {
         assert_eq!(tx, Transaction {
             client_id: 10,
             tx_id: 20,
-            amount: Some(dec!(30.123)),
-            tx_type: TransactionType::Deposit,
+            tx_type: TransactionType::Deposit(dec!(30.123)),
         });
     }
 
@@ -113,8 +156,7 @@ mod tests {
         assert_eq!(tx, Transaction {
             client_id: 10,
             tx_id: 20,
-            amount: Some(dec!(30.123)),
-            tx_type: TransactionType::Withdrawal,
+            tx_type: TransactionType::Withdrawal(dec!(30.123)),
         });
     }
 
@@ -127,7 +169,6 @@ mod tests {
         assert_eq!(tx, Transaction {
             client_id: 10,
             tx_id: 20,
-            amount: None,
             tx_type: TransactionType::Dispute,
         });
     }
@@ -141,7 +182,6 @@ mod tests {
         assert_eq!(tx, Transaction {
             client_id: 10,
             tx_id: 20,
-            amount: None,
             tx_type: TransactionType::Resolve,
         });
     }
@@ -155,7 +195,6 @@ mod tests {
         assert_eq!(tx, Transaction {
             client_id: 10,
             tx_id: 20,
-            amount: None,
             tx_type: TransactionType::Chargeback,
         });
     }
