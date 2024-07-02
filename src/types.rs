@@ -2,11 +2,11 @@ use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use serde::{ de, Deserialize, Serialize };
 
-#[cfg_attr(test, derive(Debug, PartialEq, Eq))]
-#[derive(Deserialize)]
+#[cfg_attr(test, derive(PartialEq, Eq))]
+#[derive(Debug, Deserialize)]
 // #[serde(untagged)]
 // #[serde(tag = "type", content = "amount", rename_all = "lowercase")]
-enum TransactionType {
+pub enum TransactionType {
     Deposit(Decimal),
     Withdrawal(Decimal),
     Dispute,
@@ -14,30 +14,30 @@ enum TransactionType {
     Chargeback,
 }
 
-#[cfg_attr(test, derive(Debug, PartialEq, Eq))]
-#[derive(Deserialize)]
+#[cfg_attr(test, derive(PartialEq, Eq))]
+#[derive(Debug, Deserialize)]
 pub struct Transaction {
     #[serde(rename = "client")]
-    client_id: u16,
+    pub client_id: u16,
     #[serde(rename = "tx")]
-    tx_id: u32,
+    pub tx_id: u32,
     // #[serde(flatten)] //, deserialize_with = "custom_serde::deserialize_transaction_type")]
     #[serde(flatten, deserialize_with = "custom_serde::deserialize_transaction_type")]
-    tx_type: TransactionType,
+    pub tx_type: TransactionType,
 }
 
-#[cfg_attr(test, derive(Debug, PartialEq, Eq))]
-#[derive(Serialize)]
+#[cfg_attr(test, derive(PartialEq, Eq))]
+#[derive(Debug, Serialize)]
 pub struct Account {
     #[serde(rename = "client")]
     client_id: u16,
     #[serde(serialize_with = "custom_serde::serialize_decimal")]
-    available: Decimal,
+    pub available: Decimal,
     #[serde(serialize_with = "custom_serde::serialize_decimal")]
-    held: Decimal,
+    pub held: Decimal,
     #[serde(serialize_with = "custom_serde::serialize_decimal")]
-    total: Decimal,
-    locked: bool,
+    pub total: Decimal,
+    pub locked: bool,
 }
 
 impl Account {
