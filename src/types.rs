@@ -30,7 +30,7 @@ pub struct Transaction {
 #[derive(Debug, Serialize)]
 pub struct Account {
     #[serde(rename = "client")]
-    client_id: u16,
+    pub client_id: u16,
     #[serde(serialize_with = "custom_serde::serialize_decimal")]
     pub available: Decimal,
     #[serde(serialize_with = "custom_serde::serialize_decimal")]

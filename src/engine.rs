@@ -87,6 +87,61 @@ mod tests {
     use crate::types::TransactionType;
 
     #[test]
+    fn test_example() {
+        let mut engine = Engine::new();
+
+        engine.add_transaction(Transaction {
+            client_id: 1,
+            tx_id: 1,
+            tx_type: TransactionType::Deposit(dec!(1.0)),
+        });
+
+        engine.add_transaction(Transaction {
+            client_id: 2,
+            tx_id: 2,
+            tx_type: TransactionType::Deposit(dec!(2.0)),
+        });
+
+        engine.add_transaction(Transaction {
+            client_id: 1,
+            tx_id: 3,
+            tx_type: TransactionType::Deposit(dec!(2.0)),
+        });
+
+        engine.add_transaction(Transaction {
+            client_id: 1,
+            tx_id: 4,
+            tx_type: TransactionType::Withdrawal(dec!(1.5)),
+        });
+
+        engine.add_transaction(Transaction {
+            client_id: 2,
+            tx_id: 5,
+            tx_type: TransactionType::Withdrawal(dec!(3.0)),
+        });
+
+        let accounts = engine.get_accounts();
+
+        assert_eq!(accounts.len(), 2);
+
+        assert_eq!(accounts[0], Account {
+            client_id: 1,
+            available: dec!(1.5),
+            held: dec!(0),
+            total: dec!(1.5),
+            locked: false,
+        });
+
+        assert_eq!(accounts[1], Account {
+            client_id: 2,
+            available: dec!(2.0),
+            held: dec!(0),
+            total: dec!(2.0),
+            locked: false,
+        });
+    }
+
+    #[test]
     fn test_deposit() {
         let mut engine = Engine::new();
 
