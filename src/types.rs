@@ -4,8 +4,6 @@ use serde::{ de, Deserialize, Serialize };
 
 #[cfg_attr(test, derive(PartialEq, Eq))]
 #[derive(Debug, Deserialize)]
-// #[serde(untagged)]
-// #[serde(tag = "type", content = "amount", rename_all = "lowercase")]
 pub enum TransactionType {
     Deposit(Decimal),
     Withdrawal(Decimal),
@@ -21,7 +19,6 @@ pub struct Transaction {
     pub client_id: u16,
     #[serde(rename = "tx")]
     pub tx_id: u32,
-    // #[serde(flatten)] //, deserialize_with = "custom_serde::deserialize_transaction_type")]
     #[serde(flatten, deserialize_with = "custom_serde::deserialize_transaction_type")]
     pub tx_type: TransactionType,
 }
