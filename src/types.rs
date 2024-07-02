@@ -68,28 +68,37 @@ mod custom_serde {
         serializer.serialize_str(&value.round_dp(PRECISION).to_string())
     }
 
-    fn deserialize_decimal<'de, D>(deserializer: D) -> Result<Decimal, D::Error>
+    fn deserialize_decimal<'de, D>(deserializer: D) -> Result<Option<Decimal>, D::Error>
         where D: Deserializer<'de>
     {
         struct Visitor;
 
         impl<'de> serde::de::Visitor<'de> for Visitor {
-            type Value = Decimal;
+            type Value = Option<Decimal>;
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
                 formatter.write_str("a float as a string")
             }
 
             fn visit_f64<E>(self, v: f64) -> Result<Self::Value, E> where E: serde::de::Error {
-                Decimal::from_f64(v).ok_or(de::Error::missing_field("amount"))
+                match Decimal::from_f64(v) {
+                    Some(d) => Ok(Some(d.round_dp(PRECISION))),
+                    None => Ok(None),
+                }
             }
 
-            fn visit_str<E>(self, _v: &str) -> Result<Self::Value, E> where E: serde::de::Error {
-                Ok(Decimal::ZERO)
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E> where E: serde::de::Error {
+                match Decimal::from_str_radix(v, 10) {
+                    Ok(d) => Ok(Some(d.round_dp(PRECISION))),
+                    Err(_) => Ok(None),
+                }
             }
 
-            fn visit_string<E>(self, _v: String) -> Result<Self::Value, E> where E: serde::de::Error {
-                Ok(Decimal::ZERO)
+            fn visit_string<E>(self, v: String) -> Result<Self::Value, E> where E: serde::de::Error {
+                match Decimal::from_str_radix(&v, 10) {
+                    Ok(d) => Ok(Some(d.round_dp(PRECISION))),
+                    Err(_) => Ok(None),
+                }
             }
         }
 
@@ -104,17 +113,17 @@ mod custom_serde {
             #[serde(rename = "type")]
             tx_type: String,
             #[serde(deserialize_with = "deserialize_decimal")]
-            amount: Decimal,
+            amount: Option<Decimal>,
         }
 
         let helper = Helper::deserialize(deserializer)?;
 
-        match helper.tx_type.as_str() {
-            "deposit" => Ok(TransactionType::Deposit(helper.amount.round_dp(PRECISION))),
-            "withdrawal" => Ok(TransactionType::Withdrawal(helper.amount.round_dp(PRECISION))),
-            "dispute" => Ok(TransactionType::Dispute),
-            "resolve" => Ok(TransactionType::Resolve),
-            "chargeback" => Ok(TransactionType::Chargeback),
+        match (helper.tx_type.as_str(), helper.amount) {
+            ("deposit", Some(amount)) => Ok(TransactionType::Deposit(amount)),
+            ("withdrawal", Some(amount)) => Ok(TransactionType::Withdrawal(amount)),
+            ("dispute", _) => Ok(TransactionType::Dispute),
+            ("resolve", _) => Ok(TransactionType::Resolve),
+            ("chargeback", _) => Ok(TransactionType::Chargeback),
             _ =>
                 Err(
                     de::Error::unknown_variant(
