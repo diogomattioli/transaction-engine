@@ -120,7 +120,13 @@ mod tests {
             tx_type: TransactionType::Withdrawal(dec!(3.0)),
         });
 
-        let accounts = engine.get_accounts();
+        let mut accounts = engine.get_accounts();
+        accounts.sort_by(|a, b| {
+            match a.client_id < b.client_id {
+                true => std::cmp::Ordering::Less,
+                false => std::cmp::Ordering::Greater,
+            }
+        });
 
         assert_eq!(accounts.len(), 2);
 
