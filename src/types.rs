@@ -55,6 +55,7 @@ impl Account {
 mod custom_serde {
     use std::fmt;
 
+    use rust_decimal::prelude::FromPrimitive;
     use serde::{ Deserialize, Deserializer, Serializer };
 
     use super::*;
@@ -67,6 +68,34 @@ mod custom_serde {
         serializer.serialize_str(&value.round_dp(PRECISION).to_string())
     }
 
+    fn deserialize_decimal<'de, D>(deserializer: D) -> Result<Decimal, D::Error>
+        where D: Deserializer<'de>
+    {
+        struct Visitor;
+
+        impl<'de> serde::de::Visitor<'de> for Visitor {
+            type Value = Decimal;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a float as a string")
+            }
+
+            fn visit_f64<E>(self, v: f64) -> Result<Self::Value, E> where E: serde::de::Error {
+                Decimal::from_f64(v).ok_or(de::Error::missing_field("amount"))
+            }
+
+            fn visit_str<E>(self, _v: &str) -> Result<Self::Value, E> where E: serde::de::Error {
+                Ok(Decimal::ZERO)
+            }
+
+            fn visit_string<E>(self, _v: String) -> Result<Self::Value, E> where E: serde::de::Error {
+                Ok(Decimal::ZERO)
+            }
+        }
+
+        deserializer.deserialize_any(Visitor)
+    }
+
     pub fn deserialize_transaction_type<'a, D>(deserializer: D) -> Result<TransactionType, D::Error>
         where D: Deserializer<'a>
     {
@@ -74,18 +103,15 @@ mod custom_serde {
         struct Helper {
             #[serde(rename = "type")]
             tx_type: String,
-            #[serde(deserialize_with = "f64_as_string")]
-            amount: String,
+            #[serde(deserialize_with = "deserialize_decimal")]
+            amount: Decimal,
         }
 
         let helper = Helper::deserialize(deserializer)?;
-        let amount = Decimal::from_str_exact(&helper.amount).map_err(|_|
-            de::Error::missing_field("amount")
-        );
 
         match helper.tx_type.as_str() {
-            "deposit" => Ok(TransactionType::Deposit(amount?.round_dp(PRECISION))),
-            "withdrawal" => Ok(TransactionType::Withdrawal(amount?.round_dp(PRECISION))),
+            "deposit" => Ok(TransactionType::Deposit(helper.amount.round_dp(PRECISION))),
+            "withdrawal" => Ok(TransactionType::Withdrawal(helper.amount.round_dp(PRECISION))),
             "dispute" => Ok(TransactionType::Dispute),
             "resolve" => Ok(TransactionType::Resolve),
             "chargeback" => Ok(TransactionType::Chargeback),
@@ -97,32 +123,6 @@ mod custom_serde {
                     )
                 ),
         }
-    }
-
-    fn f64_as_string<'de, D>(deserializer: D) -> Result<String, D::Error> where D: Deserializer<'de> {
-        struct F64Visitor;
-
-        impl<'de> serde::de::Visitor<'de> for F64Visitor {
-            type Value = String;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("a float as a string")
-            }
-
-            fn visit_f64<E>(self, v: f64) -> Result<Self::Value, E> where E: serde::de::Error {
-                Ok(v.to_string())
-            }
-
-            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E> where E: serde::de::Error {
-                Ok(v.to_string())
-            }
-
-            fn visit_string<E>(self, v: String) -> Result<Self::Value, E> where E: serde::de::Error {
-                Ok(v)
-            }
-        }
-
-        deserializer.deserialize_any(F64Visitor)
     }
 }
 
